@@ -33,7 +33,7 @@ def validate_sql(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Connection not found.")
 
     res = SQLValidator.validate_and_sanitize(sql=req.sql, dialect=conn.database_type)
-    return QueryValidateResponse(**res.dict())
+    return QueryValidateResponse(**res.model_dump())
 
 @router.post("/execute", response_model=QueryExecuteResponse)
 def execute_sql(

@@ -36,7 +36,7 @@ def create_connection(
     """Add a new database connection."""
     raw_conn_string = conn_in.connection_string
     if not raw_conn_string:
-        raw_conn_string = ConnectionService.build_connection_string(conn_in.dict())
+        raw_conn_string = ConnectionService.build_connection_string(conn_in.model_dump())
 
     # Pre-test connection before saving
     test_res = ConnectionService.test_connection_url(raw_conn_string)
@@ -160,7 +160,7 @@ def test_saved_connection(
 def test_raw_connection(test_req: ConnectionTestRequest):
     """Test connection parameters without saving."""
     try:
-        url = test_req.connection_string or ConnectionService.build_connection_string(test_req.dict())
+        url = test_req.connection_string or ConnectionService.build_connection_string(test_req.model_dump())
         res = ConnectionService.test_connection_url(url)
         return ConnectionTestResponse(success=res["success"], message=res["message"])
     except Exception as e:
