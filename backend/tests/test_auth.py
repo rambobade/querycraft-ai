@@ -44,3 +44,33 @@ def test_register_and_login_flow(db_session):
     refresh_in = RefreshTokenRequest(refresh_token=token_res.refresh_token)
     refreshed = auth.refresh_token(refresh_in, db=db_session)
     assert refreshed.access_token is not None
+
+
+def test_password_length_requirement(db_session):
+    import pydantic
+    with pytest.raises(pydantic.ValidationError):
+        UserRegister(
+            email=f"short.{uuid.uuid4().hex[:6]}@querycraft.ai",
+            password="short",
+            full_name="Short"
+        )
+
+
+def test_logout_and_demo(db_session):
+    from fastapi import Response
+    from app.core.config import settings
+
+    res = Response()
+    logout_out = auth.logout(response=res)
+    assert "logged out" in logout_out["message"]
+
+    # Test demo login with DEMO_MODE enabled
+    orig_demo = settings.DEMO_MODE
+    try:
+        settings.DEMO_MODE = True
+        demo_res = auth.demo_login(response=res, db=db_session)
+        assert demo_res.access_token is not None
+        assert demo_res.refresh_token is not None
+    finally:
+        settings.DEMO_MODE = orig_demo
+

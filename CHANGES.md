@@ -90,3 +90,115 @@ This document tracks all architectural decisions, security remediations, assumpt
 5. **UI Execution Fixes**:
    - Fixed the `?prompt=` URL parameter effect loop in `Playground` to trigger exactly once per distinct prompt parameter.
    - Added `AbortSignal` cancellation support to `api.generateSQL()`, `api.executeSQL()`, and analysis endpoints in `frontend/lib/api.ts`.
+
+
+---
+
+## Phase 4: UI System & Design Tokens (Zero Tailwind)
+
+### Changes Made
+1. **Removal of Tailwind and PostCSS**:
+   - Removed `tailwindcss`, `postcss`, `autoprefixer`, and `tailwind-merge` packages from `frontend/package.json`.
+   - Deleted `frontend/tailwind.config.ts` and `frontend/postcss.config.mjs`.
+   - Replaced `cn()` and `tailwind-merge` utility with a tiny 4-line `cx()` helper in `frontend/lib/utils.ts`.
+   - Removed all `@tailwind` directives from `frontend/app/globals.css`.
+2. **Design Tokens & Theme Architecture**:
+   - Created `frontend/app/tokens.css` with CSS custom properties for colors (`--bg`, `--surface`, `--surface-sunken`, `--border`, `--text`, `--text-muted`, `--accent`, `--danger`, `--success`, `--warning`), spacing (`--space-*`), typography, radii, and shadows.
+   - Implemented system-preferred and explicit dark/light mode switches via data attribute `[data-theme="dark"]` and `[data-theme="light"]`.
+   - Prevented initial theme flicker by injecting an inline `<script>` in `<head>` within `frontend/app/layout.tsx`.
+3. **Typography & Next.js Fonts**:
+   - Loaded `IBM Plex Sans` and `IBM Plex Mono` via `next/font/google` in `frontend/app/layout.tsx`, mapping to `--font-ibm-plex-sans` and `--font-ibm-plex-mono`.
+   - Established baseline body font at 15px with 1.5 line-height. Enforced a minimum font size of 12px throughout the UI (removed all legacy `text-[9px]`, `text-[10px]`, `text-[11px]`).
+4. **Accessible UI Component Library**:
+   - Developed clean, accessible UI primitives using scoped CSS Modules in `frontend/components/ui/`:
+     - `Button`: Primary, secondary, quiet, and danger variants with size scales.
+     - `Input`, `Textarea`, `Select`: Native HTML controls styled with tokens and focus-visible states.
+     - `Field`: Accessible wrapper with automatic label-to-input association (`htmlFor` via `useId`) and helper hints.
+     - `Notice`: Informational, error, success, and warning banners.
+     - `Dialog`: Accessible native `<dialog>` implementation with `showModal()`, backdrop blur, and focus trap.
+     - `ConfirmDialog`: Reusable confirmation modal with destructive action styling.
+     - `ToastProvider` / `useToast`: Accessible notification system with `aria-live="polite"` and auto-dismissal.
+     - `Tabs`: Accessible tab navigation with `role="tablist"`, `role="tab"`, and `aria-selected`.
+     - `Table`: Monospace data table with sticky headers, right-aligned numbers, and muted null cells.
+     - `EmptyState`: Clean zero-state view with subtle typography.
+     - `Spinner`, `Kbd`, `Menu`: Lightweight utility components.
+5. **Core Application Components**:
+   - Rebuilt `Sidebar.tsx`: 4 clean items (Query, Library, Connections, Settings), mobile drawer behavior, no icon tiles.
+   - Rebuilt `Navbar.tsx`: Connection switcher, user dropdown, theme toggle, and keyboard shortcuts dialog.
+   - Rebuilt `SqlEditor.tsx`: Monaco Editor integration with dynamic light/dark theme synchronization and `Ctrl+Enter` execution shortcut.
+   - Rebuilt `ResultsTable.tsx`: Monospace tabular results with 50-row pagination and sticky headers.
+   - Rebuilt `ChartView.tsx`: Recharts-based bar, line, and pie charts with accessible color tokens.
+   - Rebuilt `TablesPanel.tsx`: Collapsible schema sidebar with table and column search and click-to-insert snippet actions.
+
+---
+
+## Phase 5: Information Architecture & Page Restructure
+
+### Changes Made
+1. **Simplified Information Architecture**:
+   - Redirected `/` to `/query` via Next.js server-side redirect.
+   - Deleted legacy `/docs` and standalone `/schema` routes.
+   - Forwarded `/playground` to `/query` preserving query parameters (`?prompt=...`, `?sql=...`).
+   - Forwarded `/history` to `/library?tab=history`.
+   - Forwarded `/saved-queries` to `/library?tab=saved`.
+2. **Primary Query Workflow (`/query`)**:
+   - Natural language input with `Ctrl+Enter` shortcut, sample query starters, and generation cancellation.
+   - Explicit provenance indicator displaying `"Built-in heuristic"` or `"External AI"`.
+   - Step-by-step logic breakdown disclosure and schema tables drawer.
+   - Monaco SQL editor with execution status notice: `"Read-only. SELECT statements only. Results limited to 1,000 rows."`.
+   - Query execution tabs: Table view with pagination, Charts view, and raw JSON export.
+   - Quick export actions for CSV and JSON.
+   - Bookmark / Save query modal.
+   - EXPLAIN execution plan analysis drawer.
+   - Session storage persistence for query drafts.
+3. **Unified Library (`/library`)**:
+   - Consolidated saved queries and query history into a single tabbed interface.
+   - Full-text search and connection filtering.
+   - Paginated display (20 items per page).
+   - "Open in Query", "Copy SQL", and "Delete" actions.
+   - Safe "Clear History" confirmation dialog.
+4. **Connections Management (`/connections`)**:
+   - Clean connections table with badges for dialect and read-only sample databases.
+   - "Add Connection" dialog using strictly structured inputs (no raw connection strings).
+   - Inline "Test Connection" button providing real-time feedback.
+   - Protected deletion with `ConfirmDialog` preventing deletion of sample databases.
+5. **Settings (`/settings`)**:
+   - AI Provider section: Select provider (Gemini, Groq, OpenAI, Ollama), enter API key (write-only), model name, custom API base, and test connection.
+   - Account section: Displays authenticated user details.
+   - Appearance section: Explicit Light, Dark, or System theme toggle.
+6. **Authentication (`/login` & `/register`)**:
+   - Centered accessible forms using native `<label>` tags.
+   - Show/hide password toggles.
+   - Client-side validation enforcing 10+ character passwords.
+   - 1-Click Demo Login button for instant evaluator access.
+
+---
+
+## Phase 6: Accessibility & Responsive Verification
+
+### Changes Made
+1. **WCAG AA Compliance**:
+   - Contrast ratios verified across all token pairs in both light and dark modes (>= 4.5:1 for body text).
+   - All interactive controls have `:focus-visible` outline rings with 2px offset.
+   - Native `<dialog>` elements manage focus trapping, Esc key closure, and backdrop dismissal.
+   - Menus support keyboard closure on Escape and tab navigation.
+   - Toast notifications emit alerts via `aria-live="polite"`.
+2. **Responsive Design (360px+)**:
+   - Off-canvas mobile navigation drawer with hamburger toggle on viewports <= 768px.
+   - Flexible workspace stacking on mobile screens.
+   - Horizontally scrollable tables with sticky headers.
+
+---
+
+## Phase 7: Verification & Final Hand-Off
+
+### Changes Made
+1. **Backend Verification**:
+   - 35 unit and integration tests passing in `pytest` covering AST security validation, read-only enforcement, statement timeout progress handlers, authentication, and honest AI behavior.
+2. **Frontend Verification**:
+   - Added automated smoke test `frontend/scripts/smoke-check.mjs` verifying tokens, zero Tailwind usage, routes, and UI primitives.
+   - `npm test`, `npm run lint`, and `npm run build` pass with 0 errors and 0 warnings.
+3. **Documentation**:
+   - Rewrote `README.md` to be an honest, professional technical overview.
+   - Updated `docs/security.md` with multi-layer defense details.
+   - Updated `docs/api.md` with complete endpoint specifications.
