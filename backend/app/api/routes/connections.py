@@ -13,6 +13,7 @@ from app.schemas.connection import (
     ConnectionTestResponse
 )
 from app.services.connection_service import ConnectionService
+from app.core.rate_limiter import test_conn_limiter
 from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/connections", tags=["Database Connections"])
@@ -34,9 +35,13 @@ def create_connection(
     db: Session = Depends(get_db)
 ):
     """Add a new database connection."""
-    raw_conn_string = conn_in.connection_string
-    if not raw_conn_string:
+    try:
         raw_conn_string = ConnectionService.build_connection_string(conn_in.model_dump())
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
 
     # Pre-test connection before saving
     test_res = ConnectionService.test_connection_url(raw_conn_string)
@@ -157,10 +162,14 @@ def test_saved_connection(
     return ConnectionTestResponse(success=res["success"], message=res["message"])
 
 @router.post("/test-raw", response_model=ConnectionTestResponse)
-def test_raw_connection(test_req: ConnectionTestRequest):
-    """Test connection parameters without saving."""
+def test_raw_connection(
+    test_req: ConnectionTestRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Test connection parameters without saving. Requires authenticated user and rate-limited."""
+    test_conn_limiter.check(current_user.id)
     try:
-        url = test_req.connection_string or ConnectionService.build_connection_string(test_req.model_dump())
+        url = ConnectionService.build_connection_string(test_req.model_dump())
         res = ConnectionService.test_connection_url(url)
         return ConnectionTestResponse(success=res["success"], message=res["message"])
     except Exception as e:

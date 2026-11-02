@@ -28,7 +28,7 @@ class ApiService {
     const url = `${API_BASE}${endpoint}`;
     const headers = { ...this.getAuthHeaders(), ...options.headers };
 
-    const res = await fetch(url, { ...options, headers });
+    const res = await fetch(url, { ...options, headers, credentials: "include" });
 
     if (res.status === 401) {
       if (typeof window !== "undefined" && !window.location.pathname.includes("/login")) {
@@ -67,6 +67,22 @@ class ApiService {
     return this.request<{ access_token: string; refresh_token: string }>("/auth/login", {
       method: "POST",
       body: JSON.stringify(data),
+    });
+  }
+
+  async logout(): Promise<void> {
+    try {
+      await this.request("/auth/logout", { method: "POST" });
+    } finally {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("querycraft_access_token");
+      }
+    }
+  }
+
+  async demoLogin(): Promise<{ access_token: string; refresh_token: string }> {
+    return this.request<{ access_token: string; refresh_token: string }>("/auth/demo", {
+      method: "POST",
     });
   }
 
@@ -157,7 +173,6 @@ class ApiService {
     connection_id: string;
     sql: string;
     natural_language_input?: string;
-    skip_validation?: boolean;
   }): Promise<QueryExecutionResult> {
     return this.request<QueryExecutionResult>("/query/execute", {
       method: "POST",

@@ -51,8 +51,7 @@ def execute_sql(
 
     res = ExecutionService.execute_query(
         db_conn=conn,
-        sql=req.sql,
-        skip_validation=req.skip_validation
+        sql=req.sql
     )
 
     # Record to QueryHistory

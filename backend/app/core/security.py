@@ -7,17 +7,16 @@ from cryptography.fernet import Fernet
 from app.core.config import settings
 
 def _get_fernet() -> Fernet:
-    """Return Fernet cipher initialized with app encryption key."""
+    """Return Fernet cipher initialized with app encryption key. Fails loudly on invalid keys."""
     key = settings.ENCRYPTION_KEY
-    # Ensure key is valid 32-byte base64
+    if not key:
+        raise ValueError("ENCRYPTION_KEY is not configured.")
     try:
         raw = base64.urlsafe_b64decode(key.encode())
         if len(raw) != 32:
-            # Pad or truncate to 32 bytes
-            raw = (raw + b"0" * 32)[:32]
-            key = base64.urlsafe_b64encode(raw).decode()
-    except Exception:
-        key = base64.urlsafe_b64encode(b"querycraft-ai-secure-encryption!").decode()
+            raise ValueError(f"ENCRYPTION_KEY must decode to 32 bytes, got {len(raw)} bytes.")
+    except Exception as e:
+        raise ValueError(f"Invalid ENCRYPTION_KEY: must be a valid 32-byte urlsafe base64-encoded string: {str(e)}")
     return Fernet(key.encode())
 
 def encrypt_secret(secret: str) -> str:

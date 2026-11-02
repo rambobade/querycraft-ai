@@ -43,6 +43,8 @@ next-env.d.ts
 .env.development.local
 .env.test.local
 .env.production.local
+.dev_keys.json
+.dev_secret
 
 # IDEs & OS
 .vscode/

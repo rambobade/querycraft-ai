@@ -1,6 +1,7 @@
 """
 Query Execution Service for QueryCraft AI
-Executes validated SQL against target databases with timeout enforcement, metrics, and safe formatting.
+Executes validated SQL against target databases with read-only transaction isolation,
+real execution timeouts per dialect, and metrics formatting.
 """
 import time
 from typing import Dict, Any, List, Optional
@@ -29,48 +30,53 @@ class ExecutionService:
     def execute_query(
         cls,
         db_conn: DatabaseConnection,
-        sql: str,
-        skip_validation: bool = False
+        sql: str
     ) -> Dict[str, Any]:
-        """Validate and safely execute SQL query against connected target database."""
+        """
+        Validate and safely execute SQL query against connected target database.
+        Validation cannot be skipped.
+        Enforces read-only isolation and timeouts at both AST and database engine layers.
+        """
         dialect = db_conn.database_type.lower()
         
-        # 1. AST deterministic validation
-        validation: Optional[ValidationResult] = None
-        sql_to_run = sql
+        # 1. Deterministic AST validation
+        validation: ValidationResult = SQLValidator.validate_and_sanitize(
+            sql=sql,
+            dialect=dialect,
+            max_rows=settings.MAX_ROWS_RETURNED,
+            default_limit=settings.DEFAULT_LIMIT
+        )
+        if not validation.is_valid:
+            return {
+                "success": False,
+                "error": "; ".join(validation.errors),
+                "columns": [],
+                "rows": [],
+                "row_count": 0,
+                "duration_ms": 0.0,
+                "sanitized_sql": sql,
+                "warnings": validation.warnings,
+            }
         
-        if not skip_validation:
-            validation = SQLValidator.validate_and_sanitize(
-                sql=sql,
-                dialect=dialect,
-                max_rows=settings.MAX_ROWS_RETURNED,
-                default_limit=settings.DEFAULT_LIMIT
-            )
-            if not validation.is_valid:
-                return {
-                    "success": False,
-                    "error": "; ".join(validation.errors),
-                    "columns": [],
-                    "rows": [],
-                    "row_count": 0,
-                    "duration_ms": 0.0,
-                    "sanitized_sql": sql,
-                    "warnings": validation.warnings,
-                }
-            sql_to_run = validation.sanitized_sql
-
+        sql_to_run = validation.sanitized_sql
         engine = ConnectionService.get_engine(db_conn)
         start_time = time.perf_counter()
 
         try:
             with engine.connect() as conn:
-                # Wrap in timeout and execute
-                cursor_result = conn.execute(
-                    text(sql_to_run).execution_options(
-                        timeout=settings.QUERY_TIMEOUT_SECONDS
-                    )
-                )
+                # 2. Database-level read-only session isolation & statement timeouts
+                timeout_ms = int(settings.QUERY_TIMEOUT_SECONDS * 1000)
+                if dialect == "sqlite":
+                    conn.execute(text("PRAGMA query_only = ON;"))
+                elif dialect == "postgresql":
+                    conn.execute(text("SET TRANSACTION READ ONLY;"))
+                    conn.execute(text(f"SET statement_timeout = {timeout_ms};"))
+                elif dialect == "mysql":
+                    conn.execute(text("SET SESSION TRANSACTION READ ONLY;"))
+                    conn.execute(text(f"SET SESSION max_execution_time = {timeout_ms};"))
 
+                # 3. Execute the validated query
+                cursor_result = conn.execute(text(sql_to_run))
                 duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
 
                 if not cursor_result.returns_rows:
@@ -81,7 +87,7 @@ class ExecutionService:
                         "row_count": 0,
                         "duration_ms": duration_ms,
                         "sanitized_sql": sql_to_run,
-                        "warnings": validation.warnings if validation else [],
+                        "warnings": validation.warnings,
                     }
 
                 columns = list(cursor_result.keys())
@@ -101,15 +107,23 @@ class ExecutionService:
                     "row_count": len(rows),
                     "duration_ms": duration_ms,
                     "sanitized_sql": sql_to_run,
-                    "warnings": validation.warnings if validation else [],
+                    "warnings": validation.warnings,
                 }
 
         except Exception as e:
             duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
-            # Clean error message without system path leaks
-            err_msg = str(e).split("\n")[0]
-            if "syntax error" in err_msg.lower():
-                err_msg = f"SQL Execution Error: {err_msg}"
+            raw_err = str(e)
+            
+            # Map database timeout and read-only messages cleanly
+            if "interrupted" in raw_err.lower() or "statement_timeout" in raw_err.lower() or "max_execution_time" in raw_err.lower():
+                err_msg = f"Query timed out after exceeding the {settings.QUERY_TIMEOUT_SECONDS}-second limit."
+            elif "readonly" in raw_err.lower() or "read-only" in raw_err.lower() or "query_only" in raw_err.lower():
+                err_msg = "Database violation: Attempted write operation blocked by read-only transaction isolation."
+            else:
+                err_msg = raw_err.split("\n")[0]
+                if "syntax error" in err_msg.lower():
+                    err_msg = f"SQL Execution Error: {err_msg}"
+
             return {
                 "success": False,
                 "error": err_msg,
@@ -118,5 +132,5 @@ class ExecutionService:
                 "row_count": 0,
                 "duration_ms": duration_ms,
                 "sanitized_sql": sql_to_run,
-                "warnings": validation.warnings if validation else [],
+                "warnings": validation.warnings,
             }

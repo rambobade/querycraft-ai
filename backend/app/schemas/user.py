@@ -6,7 +6,7 @@ EMAIL_PATTERN = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
 
 class UserRegister(BaseModel):
     email: str = Field(..., pattern=EMAIL_PATTERN, description="User email address")
-    password: str = Field(..., min_length=6)
+    password: str = Field(..., min_length=10, description="Password must be at least 10 characters")
     full_name: Optional[str] = None
 
 class UserLogin(BaseModel):

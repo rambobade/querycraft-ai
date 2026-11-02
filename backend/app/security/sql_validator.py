@@ -2,7 +2,7 @@
 SQL AST Security Validator for QueryCraft AI
 Uses SQLGlot for deterministic AST parsing, statement isolation, and read-only enforcement.
 """
-from typing import List, Set, Optional, Tuple
+from typing import List, Set, Optional
 import sqlglot
 from sqlglot import exp
 from pydantic import BaseModel, Field
@@ -25,6 +25,8 @@ FORBIDDEN_EXPRESSION_TYPES = (
     exp.Rollback,
     exp.Grant,
     exp.Revoke,
+    exp.Into,   # SELECT ... INTO table (creates tables in PostgreSQL)
+    exp.Lock,   # SELECT ... FOR UPDATE (row locking / write intent)
 )
 
 FORBIDDEN_CATALOG_PATTERNS = {
@@ -36,6 +38,21 @@ FORBIDDEN_CATALOG_PATTERNS = {
     "mysql.db",
     "information_schema.user_privileges",
     "information_schema.table_privileges",
+}
+
+FORBIDDEN_FUNCTIONS = {
+    "pg_sleep",
+    "pg_read_file",
+    "pg_read_binary_file",
+    "lo_import",
+    "lo_export",
+    "pg_terminate_backend",
+    "load_extension",
+    "sleep",
+    "benchmark",
+    "load_file",
+    "readfile",
+    "writefile",
 }
 
 class ValidationResult(BaseModel):
@@ -76,7 +93,6 @@ class SQLValidator:
         try:
             parsed_statements = sqlglot.parse(trimmed, read=dialect)
         except Exception as e:
-            # Try generic parsing
             try:
                 parsed_statements = sqlglot.parse(trimmed)
             except Exception as e_generic:
@@ -112,65 +128,74 @@ class SQLValidator:
         if not isinstance(ast, allowed_root_types):
             errors.append(f"Operation '{ast.key.upper()}' is not permitted in read-only mode. Only SELECT queries are authorized.")
 
-        # 4. Check for nested forbidden mutations / DDL / DML
+        # 4. Check for nested forbidden mutations / DDL / DML / INTO / LOCK
         for forbidden_type in FORBIDDEN_EXPRESSION_TYPES:
             found = list(ast.find_all(forbidden_type))
             if found:
                 action_name = forbidden_type.__name__.upper()
                 errors.append(f"Forbidden SQL operation detected: {action_name}. Destructive or mutation operations are strictly prohibited.")
 
-        # 5. Extract and validate referenced tables
+        # 5. Check for dangerous / exploit functions
+        for func_node in ast.find_all(exp.Func, exp.Anonymous):
+            name = (
+                func_node.name
+                or (func_node.this if isinstance(func_node.this, str) else getattr(func_node.this, "name", ""))
+            )
+            clean_func = str(name).lower().strip()
+            if clean_func in FORBIDDEN_FUNCTIONS or clean_func.startswith("dblink"):
+                errors.append(f"Forbidden SQL function detected: '{clean_func}'. Dangerous functions are prohibited.")
+
+        # 6. Extract and validate referenced tables
         extracted_tables: Set[str] = set()
         for table_expr in ast.find_all(exp.Table):
             table_name = table_expr.name
             if table_name:
                 extracted_tables.add(table_name)
-                # Check forbidden catalogs
                 clean_name = table_name.lower().strip('"\'`')
                 if clean_name in FORBIDDEN_CATALOG_PATTERNS:
                     errors.append(f"Access to sensitive system catalog '{table_name}' is blocked.")
 
-        # Optional schema check against allowed tables
         if allowed_tables:
             lower_allowed = {t.lower() for t in allowed_tables}
             for tbl in extracted_tables:
                 if tbl.lower() not in lower_allowed:
                     warnings.append(f"Table '{tbl}' was not found in the connected database schema.")
 
-        # 6. Extract columns
+        # 7. Extract columns
         extracted_columns: Set[str] = set()
         for col_expr in ast.find_all(exp.Column):
             if col_expr.name and col_expr.name != "*":
                 extracted_columns.add(col_expr.name)
 
-        # 7. Safe LIMIT handling
+        # 8. Check and clamp the root statement's own LIMIT
         has_limit = False
         applied_limit: Optional[int] = None
-        limit_nodes = list(ast.find_all(exp.Limit))
-        
-        if limit_nodes:
+        root_limit = ast.args.get("limit")
+
+        if root_limit:
             has_limit = True
             try:
-                limit_val_expr = limit_nodes[0].expression
-                limit_val = int(limit_val_expr.name) if hasattr(limit_val_expr, "name") else int(str(limit_val_expr))
+                expr = root_limit.expression
+                limit_val = int(expr.this if hasattr(expr, "this") else str(expr))
                 if limit_val > max_rows:
                     warnings.append(f"Requested LIMIT ({limit_val}) exceeds safety maximum of {max_rows}. Capped to {max_rows}.")
-                    limit_nodes[0].set("expression", exp.Literal.number(max_rows))
+                    root_limit.set("expression", exp.Literal.number(max_rows))
                     applied_limit = max_rows
                 else:
                     applied_limit = limit_val
             except Exception:
-                # If complex limit expression, clamp
                 warnings.append(f"Clamped complex limit expression to safety maximum of {max_rows}.")
-                limit_nodes[0].set("expression", exp.Literal.number(max_rows))
+                root_limit.set("expression", exp.Literal.number(max_rows))
                 applied_limit = max_rows
         else:
-            # Auto-inject limit for safety if root is Select
-            if isinstance(ast, exp.Select):
+            # Apply limit to root statement (works on Select, Union, Intersect, Except)
+            try:
                 ast = ast.limit(default_limit)
                 has_limit = True
                 applied_limit = default_limit
                 warnings.append(f"No LIMIT was specified; automatically added LIMIT {default_limit} for performance.")
+            except Exception:
+                pass
 
         # Generate sanitized SQL string
         try:

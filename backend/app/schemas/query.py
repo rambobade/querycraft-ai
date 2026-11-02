@@ -21,7 +21,6 @@ class QueryExecuteRequest(BaseModel):
     connection_id: str
     sql: str
     natural_language_input: Optional[str] = None
-    skip_validation: bool = False
 
 class QueryExecuteResponse(BaseModel):
     success: bool

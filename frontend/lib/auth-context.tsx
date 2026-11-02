@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { User, DatabaseConnection } from "./types";
 import { api } from "./api";
 
@@ -11,7 +11,8 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, fullName?: string) => Promise<void>;
-  logout: () => void;
+  demoLogin: () => Promise<void>;
+  logout: () => Promise<void>;
   setActiveConnection: (conn: DatabaseConnection | null) => void;
   refreshConnections: () => Promise<void>;
 }
@@ -24,64 +25,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [activeConnection, setActiveConnection] = useState<DatabaseConnection | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchUserData = async () => {
-    const token = localStorage.getItem("querycraft_access_token");
-    if (!token) {
-      setIsLoading(false);
-      return;
-    }
+  const fetchUserData = useCallback(async () => {
     try {
       const userData = await api.getMe();
       setUser(userData);
       const conns = await api.getConnections();
       setConnections(conns);
       if (conns.length > 0) {
-        // Restore last selected connection or select the first one
-        const savedConnId = localStorage.getItem("querycraft_active_conn_id");
+        const savedConnId = typeof window !== "undefined" ? localStorage.getItem("querycraft_active_conn_id") : null;
         const found = conns.find((c) => c.id === savedConnId);
         setActiveConnection(found || conns[0]);
       }
-    } catch (err) {
-      console.error("Auth check failed:", err);
-      localStorage.removeItem("querycraft_access_token");
+    } catch {
       setUser(null);
+      setConnections([]);
+      setActiveConnection(null);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchUserData();
-  }, []);
+  }, [fetchUserData]);
 
   const handleSetActiveConnection = (conn: DatabaseConnection | null) => {
     setActiveConnection(conn);
-    if (conn) {
+    if (conn && typeof window !== "undefined") {
       localStorage.setItem("querycraft_active_conn_id", conn.id);
-    } else {
+    } else if (typeof window !== "undefined") {
       localStorage.removeItem("querycraft_active_conn_id");
     }
   };
 
   const login = async (email: string, password: string) => {
-    const res = await api.login({ email, password });
-    localStorage.setItem("querycraft_access_token", res.access_token);
+    await api.login({ email, password });
     await fetchUserData();
   };
 
   const register = async (email: string, password: string, fullName?: string) => {
-    const res = await api.register({ email, password, full_name: fullName });
-    localStorage.setItem("querycraft_access_token", res.access_token);
+    await api.register({ email, password, full_name: fullName });
     await fetchUserData();
   };
 
-  const logout = () => {
-    localStorage.removeItem("querycraft_access_token");
-    localStorage.removeItem("querycraft_active_conn_id");
-    setUser(null);
-    setConnections([]);
-    setActiveConnection(null);
-    window.location.href = "/login";
+  const demoLogin = async () => {
+    await api.demoLogin();
+    await fetchUserData();
+  };
+
+  const logout = async () => {
+    try {
+      await api.logout();
+    } finally {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("querycraft_active_conn_id");
+        localStorage.removeItem("querycraft_access_token");
+      }
+      setUser(null);
+      setConnections([]);
+      setActiveConnection(null);
+      window.location.href = "/login";
+    }
   };
 
   const refreshConnections = async () => {
@@ -105,6 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         login,
         register,
+        demoLogin,
         logout,
         setActiveConnection: handleSetActiveConnection,
         refreshConnections,

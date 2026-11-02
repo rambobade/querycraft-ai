@@ -2,8 +2,10 @@
 QueryCraft AI - Backend Application
 Natural Language to SQL Query Builder Engine
 """
+import uuid
+import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.core.config import settings
@@ -11,11 +13,14 @@ from app.core.database import engine, Base
 import app.models  # Ensure all models are registered with Base metadata
 from app.api.routes import auth, connections, schema, ai, query, saved_queries, health
 
+logger = logging.getLogger("querycraft")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: ensure tables are created
     Base.metadata.create_all(bind=engine)
-    print(f"[{settings.APP_NAME}] Backend initialized successfully in {settings.APP_ENV} mode.")
+    logger.info(f"[{settings.APP_NAME}] Backend initialized successfully in {settings.APP_ENV} mode.")
     yield
     # Shutdown
 
@@ -33,18 +38,28 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
-# Centralized error handler
+# Centralized error handler preventing information leakage
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    # Prevent leaking internal stack traces in non-debug mode
-    error_message = str(exc).split("\n")[0]
+    if isinstance(exc, HTTPException):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail},
+            headers=getattr(exc, "headers", None)
+        )
+    
+    request_id = str(uuid.uuid4())
+    logger.exception(f"Unhandled server error [request_id={request_id}] on {request.method} {request.url.path}: {exc}")
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": f"An internal server error occurred: {error_message}"}
+        content={
+            "detail": "An internal server error occurred.",
+            "request_id": request_id
+        }
     )
 
 # Include API Routers
