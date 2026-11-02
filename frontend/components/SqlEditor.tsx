@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Editor from "@monaco-editor/react";
-import { Play, Copy, Check, Download, Trash2, Wand2, Shield } from "lucide-react";
+import { Play, Copy, Check, Download, RotateCcw } from "lucide-react";
+import styles from "./SqlEditor.module.css";
+import { Button, Spinner, Kbd } from "@/components/ui";
 
-interface SqlEditorProps {
+export interface SqlEditorProps {
   value: string;
   onChange: (val: string) => void;
   onExecute: () => void;
@@ -13,6 +15,24 @@ interface SqlEditorProps {
 
 export function SqlEditor({ value, onChange, onExecute, isExecuting }: SqlEditorProps) {
   const [copied, setCopied] = useState(false);
+  const [isDark, setIsDark] = useState(true);
+
+  useEffect(() => {
+    const checkTheme = () => {
+      const themeAttr = document.documentElement.getAttribute("data-theme");
+      if (themeAttr === "light") {
+        setIsDark(false);
+      } else if (themeAttr === "dark") {
+        setIsDark(true);
+      } else {
+        setIsDark(window.matchMedia("(prefers-color-scheme: dark)").matches);
+      }
+    };
+    checkTheme();
+    const observer = new MutationObserver(checkTheme);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, []);
 
   const handleCopy = () => {
     if (!value) return;
@@ -27,24 +47,9 @@ export function SqlEditor({ value, onChange, onExecute, isExecuting }: SqlEditor
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `querycraft_${Date.now()}.sql`;
+    a.download = `query_${Date.now()}.sql`;
     a.click();
     URL.revokeObjectURL(url);
-  };
-
-  const handleFormat = () => {
-    if (!value) return;
-    // Simple client-side standard keyword indentation format
-    const keywords = [
-      "SELECT", "FROM", "WHERE", "GROUP BY", "HAVING", "ORDER BY",
-      "LEFT JOIN", "RIGHT JOIN", "INNER JOIN", "JOIN", "LIMIT", "UNION", "WITH"
-    ];
-    let formatted = value;
-    keywords.forEach((kw) => {
-      const regex = new RegExp(`\\b${kw}\\b`, "gi");
-      formatted = formatted.replace(regex, `\n${kw.toUpperCase()}`);
-    });
-    onChange(formatted.trim());
   };
 
   const handleClear = () => {
@@ -52,77 +57,63 @@ export function SqlEditor({ value, onChange, onExecute, isExecuting }: SqlEditor
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#0d1424] border border-slate-800 rounded-xl overflow-hidden shadow-sm">
-      {/* Editor Toolbar */}
-      <div className="h-11 px-4 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between text-xs">
-        <div className="flex items-center gap-2">
-          <span className="font-semibold text-slate-300">SQL Query Editor</span>
-          <span className="text-[10px] text-slate-500 font-mono">Monaco • SQLGlot AST Guard</span>
-        </div>
+    <div className={styles.container}>
+      <div className={styles.toolbar}>
+        <span className={styles.title}>SQL</span>
 
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={handleFormat}
-            disabled={!value}
-            title="Format SQL"
-            className="p-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 disabled:opacity-40 transition-colors"
-          >
-            <Wand2 className="h-3.5 w-3.5" />
-          </button>
-
-          <button
+        <div className={styles.actions}>
+          <Button
+            variant="quiet"
+            size="sm"
             onClick={handleCopy}
             disabled={!value}
-            title="Copy SQL"
-            className="p-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 disabled:opacity-40 transition-colors"
+            aria-label={copied ? "Copied" : "Copy SQL"}
           >
-            {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-          </button>
+            {copied ? <Check size={14} strokeWidth={1.5} /> : <Copy size={14} strokeWidth={1.5} />}
+          </Button>
 
-          <button
+          <Button
+            variant="quiet"
+            size="sm"
             onClick={handleDownload}
             disabled={!value}
-            title="Download .sql"
-            className="p-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 disabled:opacity-40 transition-colors"
+            aria-label="Download SQL"
           >
-            <Download className="h-3.5 w-3.5" />
-          </button>
+            <Download size={14} strokeWidth={1.5} />
+          </Button>
 
-          <button
+          <Button
+            variant="quiet"
+            size="sm"
             onClick={handleClear}
             disabled={!value}
-            title="Clear Editor"
-            className="p-1.5 rounded text-slate-400 hover:text-rose-400 hover:bg-rose-950/30 disabled:opacity-40 transition-colors"
+            aria-label="Clear SQL editor"
           >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+            <RotateCcw size={14} strokeWidth={1.5} />
+          </Button>
 
-          <div className="h-4 w-px bg-slate-800 mx-1" />
-
-          {/* Run Query Button */}
-          <button
+          <Button
+            variant="primary"
+            size="sm"
             onClick={onExecute}
             disabled={isExecuting || !value.trim()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-semibold shadow-sm shadow-emerald-900/30 transition-all text-xs"
           >
-            <Play className={`h-3.5 w-3.5 ${isExecuting ? "animate-spin" : "fill-current"}`} />
-            <span>{isExecuting ? "Executing..." : "Run Query"}</span>
-            <span className="hidden sm:inline text-[10px] opacity-75 font-mono ml-1">Ctrl+↵</span>
-          </button>
+            {isExecuting ? <Spinner label="Running query..." /> : <Play size={14} strokeWidth={1.5} />}
+            <span>Run</span>
+            <Kbd>Ctrl+↵</Kbd>
+          </Button>
         </div>
       </div>
 
-      {/* Monaco Editor Container */}
-      <div className="flex-1 min-h-[220px]">
+      <div className={styles.editorArea}>
         <Editor
           height="100%"
           defaultLanguage="sql"
           language="sql"
-          theme="vs-dark"
+          theme={isDark ? "vs-dark" : "light"}
           value={value}
           onChange={(v) => onChange(v || "")}
           onMount={(editor, monaco) => {
-            // Bind Ctrl+Enter shortcut for execution
             editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
               onExecute();
             });
@@ -130,28 +121,24 @@ export function SqlEditor({ value, onChange, onExecute, isExecuting }: SqlEditor
           options={{
             minimap: { enabled: false },
             fontSize: 13,
-            fontFamily: "var(--font-jetbrains), Consolas, Monaco, monospace",
+            fontFamily: "var(--font-mono), monospace",
             lineNumbers: "on",
             scrollBeyondLastLine: false,
             automaticLayout: true,
             tabSize: 2,
-            padding: { top: 12, bottom: 12 },
+            padding: { top: 8, bottom: 8 },
             renderLineHighlight: "all",
             overviewRulerBorder: false,
-            folding: true,
+            folding: false,
           }}
         />
       </div>
 
-      {/* Editor Footer / Security Indicator */}
-      <div className="h-7 px-4 bg-slate-900/90 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-500 font-mono">
-        <div className="flex items-center gap-1.5 text-emerald-400">
-          <Shield className="h-3 w-3" />
-          <span>AST Sanitizer: Prohibits DDL/DML Mutations</span>
-        </div>
-        <div>
-          <span>{value.split("\n").length} lines • {value.length} chars</span>
-        </div>
+      <div className={styles.footer}>
+        <span>Read-only. SELECT statements only. Results limited to 1,000 rows.</span>
+        <span>
+          {value ? `${value.split("\n").length} lines` : "Empty"}
+        </span>
       </div>
     </div>
   );

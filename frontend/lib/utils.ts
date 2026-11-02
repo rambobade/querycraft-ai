@@ -1,11 +1,12 @@
 import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
 
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
+export function cx(...inputs: ClassValue[]): string {
+  return clsx(inputs);
 }
 
-export function formatBytes(bytes: number, decimals = 2) {
+export const cn = cx;
+
+export function formatBytes(bytes: number, decimals = 2): string {
   if (bytes === 0) return "0 Bytes";
   const k = 1024;
   const dm = decimals < 0 ? 0 : decimals;
@@ -14,7 +15,7 @@ export function formatBytes(bytes: number, decimals = 2) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i];
 }
 
-export function formatDate(dateStr: string) {
+export function formatDate(dateStr: string): string {
   try {
     const d = new Date(dateStr);
     return d.toLocaleString("en-US", {

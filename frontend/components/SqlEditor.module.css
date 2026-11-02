@@ -1,0 +1,50 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background-color: var(--surface);
+  overflow: hidden;
+}
+
+.toolbar {
+  height: 38px;
+  padding: 0 var(--space-3);
+  background-color: var(--surface-sunken);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.editorArea {
+  min-height: 200px;
+  height: 240px;
+  resize: vertical;
+  overflow: hidden;
+  background-color: var(--surface);
+}
+
+.footer {
+  padding: var(--space-2) var(--space-3);
+  background-color: var(--surface-sunken);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
