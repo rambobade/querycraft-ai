@@ -23,3 +23,4 @@ class User(Base):
     connections = relationship("DatabaseConnection", back_populates="user", cascade="all, delete-orphan")
     query_history = relationship("QueryHistory", back_populates="user", cascade="all, delete-orphan")
     saved_queries = relationship("SavedQuery", back_populates="user", cascade="all, delete-orphan")
+    llm_setting = relationship("UserLLMSetting", back_populates="user", uselist=False, cascade="all, delete-orphan")

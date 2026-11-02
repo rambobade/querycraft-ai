@@ -8,6 +8,7 @@ import {
   QueryExecutionResult,
   QueryHistoryItem,
   SavedQuery,
+  LLMSetting,
 } from "./types";
 
 const API_BASE = "/api";
@@ -127,36 +128,62 @@ class ApiService {
   }
 
   // AI
-  async generateSQL(params: {
-    connection_id: string;
-    natural_language_input: string;
-    provider_override?: string;
-    api_key_override?: string;
-    model_override?: string;
-    api_base_override?: string;
-  }): Promise<AISqlResponse> {
+  async generateSQL(
+    params: {
+      connection_id: string;
+      natural_language_input: string;
+    },
+    signal?: AbortSignal
+  ): Promise<AISqlResponse> {
     return this.request<AISqlResponse>("/ai/generate-sql", {
       method: "POST",
       body: JSON.stringify(params),
+      signal,
     });
   }
 
-  async explainSQL(connectionId: string, sql: string): Promise<AIExplanation> {
+  async explainSQL(connectionId: string, sql: string, signal?: AbortSignal): Promise<AIExplanation> {
     return this.request<AIExplanation>("/ai/explain-sql", {
       method: "POST",
       body: JSON.stringify({ connection_id: connectionId, sql }),
+      signal,
     });
   }
 
-  async optimizeSQL(connectionId: string, sql: string): Promise<AIOptimization> {
+  async optimizeSQL(connectionId: string, sql: string, signal?: AbortSignal): Promise<AIOptimization> {
     return this.request<AIOptimization>("/ai/optimize-sql", {
       method: "POST",
       body: JSON.stringify({ connection_id: connectionId, sql }),
+      signal,
+    });
+  }
+
+  // LLM Settings
+  async getLLMSettings(): Promise<LLMSetting> {
+    return this.request<LLMSetting>("/settings/llm");
+  }
+
+  async updateLLMSettings(data: {
+    provider: string;
+    api_key?: string;
+    model?: string;
+    api_base?: string;
+    temperature?: number;
+  }): Promise<LLMSetting> {
+    return this.request<LLMSetting>("/settings/llm", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async testLLMConnection(): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>("/settings/llm/test", {
+      method: "POST",
     });
   }
 
   // Query Execution
-  async validateSQL(connectionId: string, sql: string) {
+  async validateSQL(connectionId: string, sql: string, signal?: AbortSignal) {
     return this.request<{
       is_valid: boolean;
       sanitized_sql: string;
@@ -166,17 +193,22 @@ class ApiService {
     }>("/query/validate", {
       method: "POST",
       body: JSON.stringify({ connection_id: connectionId, sql }),
+      signal,
     });
   }
 
-  async executeSQL(params: {
-    connection_id: string;
-    sql: string;
-    natural_language_input?: string;
-  }): Promise<QueryExecutionResult> {
+  async executeSQL(
+    params: {
+      connection_id: string;
+      sql: string;
+      natural_language_input?: string;
+    },
+    signal?: AbortSignal
+  ): Promise<QueryExecutionResult> {
     return this.request<QueryExecutionResult>("/query/execute", {
       method: "POST",
       body: JSON.stringify(params),
+      signal,
     });
   }
 

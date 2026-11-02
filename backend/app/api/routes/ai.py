@@ -1,7 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
+from app.core.security import decrypt_secret
+from app.core.rate_limiter import ai_limiter
 from app.models.user import User
+from app.models.user_llm_setting import UserLLMSetting
 from app.models.connection import DatabaseConnection
 from app.schemas.ai import (
     GenerateSQLRequest,
@@ -24,7 +27,9 @@ async def generate_sql(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Generate SQL from natural language using schema context and LLM."""
+    """Generate SQL from natural language using schema context and server-configured LLM."""
+    ai_limiter.check(current_user.id)
+
     conn = db.query(DatabaseConnection).filter(
         DatabaseConnection.id == req.connection_id,
         DatabaseConnection.user_id == current_user.id
@@ -32,13 +37,23 @@ async def generate_sql(
     if not conn:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Database connection not found.")
 
+    # Retrieve user's encrypted LLM settings
+    user_setting = db.query(UserLLMSetting).filter(UserLLMSetting.user_id == current_user.id).first()
+    llm_config = None
+    if user_setting:
+        api_key = decrypt_secret(user_setting.encrypted_api_key) if user_setting.encrypted_api_key else None
+        llm_config = {
+            "provider": user_setting.provider,
+            "api_key": api_key,
+            "model": user_setting.model,
+            "api_base": user_setting.api_base,
+            "temperature": user_setting.temperature
+        }
+
     res = await SQLGenerator.generate_sql(
         db_conn=conn,
         natural_language_input=req.natural_language_input,
-        provider_override=req.provider_override,
-        api_key_override=req.api_key_override,
-        model_override=req.model_override,
-        api_base_override=req.api_base_override
+        llm_config=llm_config
     )
     return GenerateSQLResponse(**res)
 
@@ -48,7 +63,7 @@ def explain_sql(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Explain SQL query with step-by-step breakdown and operations."""
+    """Explain SQL query with deterministic step-by-step breakdown and operations."""
     conn = db.query(DatabaseConnection).filter(
         DatabaseConnection.id == req.connection_id,
         DatabaseConnection.user_id == current_user.id
@@ -65,7 +80,7 @@ def optimize_sql(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Analyze query execution plan and generate optimization recommendations."""
+    """Analyze query execution plan and recommend performance indexes."""
     conn = db.query(DatabaseConnection).filter(
         DatabaseConnection.id == req.connection_id,
         DatabaseConnection.user_id == current_user.id

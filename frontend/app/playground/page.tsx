@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { Navbar } from "@/components/Navbar";
@@ -55,15 +55,19 @@ function PlaygroundContent() {
   const [saveTags, setSaveTags] = useState("");
   const [saveDesc, setSaveDesc] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const handledPromptRef = useRef<string | null>(null);
 
-  // Read URL query params on load (e.g. from Dashboard click)
+  // Read URL query params on load (e.g. from Dashboard click) - once per URL parameter value
   useEffect(() => {
     const p = searchParams.get("prompt");
     const s = searchParams.get("sql");
-    if (p) setNlInput(p);
     if (s) setSqlQuery(s);
-    if (p && !s && activeConnection) {
-      handleGenerate(p);
+    if (p && p !== handledPromptRef.current) {
+      handledPromptRef.current = p;
+      setNlInput(p);
+      if (!s && activeConnection) {
+        handleGenerate(p);
+      }
     }
   }, [searchParams, activeConnection]);
 

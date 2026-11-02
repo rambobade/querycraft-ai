@@ -4,10 +4,6 @@ from pydantic import BaseModel, Field
 class GenerateSQLRequest(BaseModel):
     connection_id: str
     natural_language_input: str
-    provider_override: Optional[str] = None
-    api_key_override: Optional[str] = None
-    model_override: Optional[str] = None
-    api_base_override: Optional[str] = None
 
 class GenerateSQLResponse(BaseModel):
     sql: str
@@ -18,6 +14,7 @@ class GenerateSQLResponse(BaseModel):
     warnings: List[str] = Field(default_factory=list)
     confidence: str = "high"
     source: str = "heuristic"
+    notice: Optional[str] = None
     is_valid: bool = True
     validation_errors: List[str] = Field(default_factory=list)
 

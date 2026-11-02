@@ -67,3 +67,26 @@ This document tracks all architectural decisions, security remediations, assumpt
    - Added `POST /api/auth/demo` creating throwaway accounts with randomized credentials when `DEMO_MODE=true`.
 7. **Error Masking**:
    - Hardened `global_exception_handler` in `backend/app/main.py`: passes through legitimate `HTTPException` responses, logs unhandled server errors with full tracebacks server-side, and returns a generic error with a unique `request_id`.
+
+
+---
+
+## Phase 3: Honest AI Behavior
+
+### Changes Made
+1. **Server-Side Encrypted LLM Settings**:
+   - Replaced fragile and disconnected client-side `localStorage` LLM settings with a persistent database model `UserLLMSetting`.
+   - Encrypted user API keys server-side using Fernet encryption (`encrypted_api_key`).
+   - Exposed `GET /api/settings/llm`, `PUT /api/settings/llm`, and `POST /api/settings/llm/test`. Keys are strictly write-only, returning `has_key: bool` in API responses and never leaking raw keys.
+   - Removed `*_override` arguments (`api_base_override`, `api_key_override`, `provider_override`, `model_override`) from public `GenerateSQLRequest` schemas, eliminating Server-Side Request Forgery (SSRF).
+2. **Transparent Fallback & Provenance**:
+   - In `SQLGenerator.generate_sql`, exceptions from external LLM providers are logged server-side, and responses return explicit provenance (`source: "heuristic"`) alongside a clear notice (`"The AI provider failed, so the built-in matcher was used."`).
+   - UI models and clients display query provenance honestly without concealing errors.
+3. **Custom Database Schema Integrity**:
+   - Heuristic matching is strictly confined to the preloaded sample e-commerce database. On any custom/user-added database without a functional LLM provider, generation is rejected upfront with a clear instruction to configure an AI provider in Settings, preventing hallucinated queries against non-existent tables.
+4. **Relabeling & Schema Privacy Disclosure**:
+   - Clarified that SQL explanations are deterministic AST-derived analysis rather than LLM-generated content.
+   - Documented schema privacy boundary: table and column definitions are sent to the external provider for prompt construction; row values are never transmitted.
+5. **UI Execution Fixes**:
+   - Fixed the `?prompt=` URL parameter effect loop in `Playground` to trigger exactly once per distinct prompt parameter.
+   - Added `AbortSignal` cancellation support to `api.generateSQL()`, `api.executeSQL()`, and analysis endpoints in `frontend/lib/api.ts`.

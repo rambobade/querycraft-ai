@@ -67,6 +67,19 @@ Delete a connection and associated schema cache.
 
 ---
 
+## User Settings (`/api/settings/llm`)
+
+### `GET /api/settings/llm`
+Retrieve the authenticated user's current LLM provider configuration. The API key is write-only and is never returned in plaintext (`has_key: boolean`).
+
+### `PUT /api/settings/llm`
+Update the user's LLM provider settings (provider, api_key, model, api_base, temperature). API keys are encrypted at rest using server-side Fernet encryption.
+
+### `POST /api/settings/llm/test`
+Validates provider connectivity with an ephemeral ping using the user's saved credentials.
+
+---
+
 ## AI Generation & Analysis (`/api/ai`)
 
 ### `POST /api/ai/generate-sql`

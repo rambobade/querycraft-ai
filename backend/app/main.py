@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.core.database import engine, Base
 import app.models  # Ensure all models are registered with Base metadata
-from app.api.routes import auth, connections, schema, ai, query, saved_queries, health
+from app.api.routes import auth, connections, schema, ai, query, saved_queries, health, settings_llm
 
 logger = logging.getLogger("querycraft")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -70,6 +70,7 @@ app.include_router(schema.router, prefix=settings.API_V1_STR)
 app.include_router(ai.router, prefix=settings.API_V1_STR)
 app.include_router(query.router, prefix=settings.API_V1_STR)
 app.include_router(saved_queries.router, prefix=settings.API_V1_STR)
+app.include_router(settings_llm.router, prefix=settings.API_V1_STR)
 
 @app.get("/")
 def root():

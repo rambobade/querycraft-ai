@@ -65,8 +65,18 @@ export interface AISqlResponse {
   warnings: string[];
   confidence: "high" | "medium" | "low";
   source: "llm" | "heuristic";
+  notice?: string;
   is_valid: boolean;
   validation_errors: string[];
+}
+
+export interface LLMSetting {
+  provider: string;
+  has_key: boolean;
+  model: string;
+  api_base: string;
+  temperature: number;
+  updated_at?: string;
 }
 
 export interface AIExplanation {
